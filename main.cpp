@@ -17,8 +17,16 @@ using namespace cv;
 void control_box();
 
 //Global Declarations
-IplImage *frame_BGR;
-int x_pos = 0, y_pos = 0;
+int x_pos = 0, y_pos = 0, enable = 0;
+int object_trackbar;
+
+CvScalar Object1_color;
+CvScalar Object1_color_h;
+CvScalar Object1_color_l;
+double Object1_area, Object1_x, Object1_y;
+
+//Image Declarations
+IplImage* frame_BGR, *frame_GRY, *frame_THS, *frame_HSV, *frame_THS_temp;
 
 //MAIN FUNCTION
 int main(int argc, char** argv) {
@@ -33,37 +41,56 @@ int main(int argc, char** argv) {
 	control_box();
 
 	//Image Pointers declarations
-	CvCapture *capture = cvCaptureFromCAM(1);
-	frame_BGR = cvQueryFrame(capture);
-	IplImage *frame_GRY = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
-	IplImage *frame_THRES = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U,
-			1);
-	IplImage *frame_HSV = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 3);
+	CvCapture *capture = cvCaptureFromCAM(0);
+	//0-Internal Camera
+	//1-External Camera
 
 	//EXIT CONDITION IF NO CAMERA DETECTED
+	frame_BGR = cvQueryFrame(capture);
 	if (frame_BGR == 0) {
 		printf("No input Detected. \n Program now exiting");
 		return 0;
 	}
 
+	frame_GRY = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
+	frame_THS = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
+	frame_THS_temp = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
+	frame_HSV = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 3);
+
+	//Object Images
+	IplImage *Object1 = cvCreateImage(cvGetSize(frame_HSV), IPL_DEPTH_8U, 1);
+	IplImage *Object2 = cvCreateImage(cvGetSize(frame_HSV), IPL_DEPTH_8U, 1);
+	IplImage *Object3 = cvCreateImage(cvGetSize(frame_HSV), IPL_DEPTH_8U, 1);
+
 	//MOUSE FUNCTIONS DECLARATION
 	cvSetMouseCallback("INPUT1", MouseMoveINPUT, 0);
+
+	CvMoments* Object1_moment = (CvMoments*) malloc(sizeof(CvMoments));
 
 	//MAIN WHILE LOOP
 	while (input != 27) {
 		//Acquire Image
-		IplImage *frame_BGR = cvQueryFrame(capture);
-		cvSmooth(frame_BGR,frame_BGR,CV_BLUR,3,3);
+		frame_BGR = cvQueryFrame(capture);
+		cvSmooth(frame_BGR, frame_BGR, CV_BLUR, 3, 3);
 		cvCvtColor(frame_BGR, frame_HSV, CV_BGR2HSV);
 		//cvShowImage("OUTPUT1", frame_HSV);
-		//Process Image
-		if (x_pos != 0 && y_pos != 0) {
 
-			cvInRangeS(frame_HSV,
-					GetPixelScalarThres(frame_HSV, &x_pos, &y_pos, LOWER),
-					GetPixelScalarThres(frame_HSV, &x_pos, &y_pos, UPPER),
-					frame_THRES);
-			cvShowImage("OUTPUT1", frame_THRES);
+		//Process Image
+		if (enable == 1) {
+
+			cvInRangeS(frame_BGR, Object1_color_l, Object1_color_h,
+					frame_THS_temp);
+			cvDilate(frame_THS_temp, frame_THS, NULL, 4);
+			cvShowImage("OUTPUT1", frame_THS);
+			cvMoments(frame_THS, Object1_moment, 1);
+			Object1_area = cvGetCentralMoment(Object1_moment, 0, 0);
+			Object1_x = (cvGetSpatialMoment(Object1_moment, 1, 0))
+					/ Object1_area;
+			Object1_y = (cvGetSpatialMoment(Object1_moment, 0, 1))
+					/ Object1_area;
+			cvCircle(frame_BGR, cvPoint(Object1_x, Object1_y), 5,
+					CV_RGB(0xff,0xff,0xff));
+			printf("%lf %lf \n", Object1_x, Object1_y);
 		}
 
 		//Display Functions
@@ -71,11 +98,11 @@ int main(int argc, char** argv) {
 
 		//Check if ESC Key is pressed
 		input = cvWaitKey(1);
-	} //MAIN WHILE LOOP END
+	} //SUPER WHILE LOOP END
 
 	//Cleaning Up
 	printf("EXITING.....");
-	//cvDestroyAllWindows();
+	cvDestroyAllWindows();
 	cvReleaseImage(&frame_BGR);
 	cvReleaseImage(&frame_GRY);
 	cvReleaseCapture(&capture);
@@ -83,20 +110,29 @@ int main(int argc, char** argv) {
 
 //Initialization of CONTROL_BOX
 void control_box() {
+	cvCreateTrackbar("Picture", "CONTROL_BOX", &object_trackbar, 15, NULL);
 }
 
-//Call-back Function for INPUT window
+//Call-back Function for INPUT1 window
+//When MouseEvent occurs over INPUT1,
+//this function is called with an event and positions of x and y.
 void MouseMoveINPUT(int event, int x, int y, int, void*) {
 	if (event == CV_EVENT_MOUSEMOVE) {
-		int B, G, R;
-		GetPixelValues(frame_BGR, &x, &y, &B, &G, &R);
+		//uchar B, G, R;
+		//GetPixelValues(frame_BGR, &x, &y, &B, &G, &R);
 		//printf("x=%d y=%d  B=%d G=%d R=%d\n", x, y, B, G, R);
 	}
 	if (event == CV_EVENT_RBUTTONDOWN) {
-		x_pos = x;
-		y_pos = y;
-		printf("x_pos=%d y_pos=%d\n", x, y);
+		enable = 1;
+		//Object1_color = GetPixelScalar(frame_BGR, &x, &y);
+		uchar B, G, R;
+		GetPixelValues(frame_BGR, &x, &y, &B, &G, &R);
+		Object1_color.val[0] = (double) B;
+		Object1_color.val[1] = (double) G;
+		Object1_color.val[2] = (double) R;
 
+		GetBoundaryColor(&Object1_color, &Object1_color_h, &Object1_color_l);
+		//printf("%lf %lf %lf \n", Object1_color.val[0], Object1_color.val[1],	Object1_color.val[2]);
 	}
 }
 

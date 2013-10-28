@@ -9,7 +9,17 @@
 #include <highgui.h>
 #include "MyDefs.h"
 
-void GetPixelValues(IplImage* image, int* x, int* y, int* B, int* G, int* R) {
+struct myObject {
+	int object_id;
+	CvScalar Object_color;
+	CvScalar Object_color_h;
+	CvScalar Object_color_l;
+
+	double Object1_area, Object1_x, Object1_y;
+};
+
+void GetPixelValues(IplImage* image, int* x, int* y, uchar* B, uchar* G,
+		uchar* R) {
 	int xx = *x, yy = *y;
 	uchar* ptr = (uchar*) ((image->imageData) + (yy * (image->widthStep)));
 	*B = ptr[(3 * xx) + 0];
@@ -56,3 +66,34 @@ CvScalar GetPixelScalarThres(IplImage* image, int* x, int* y, char param = 0) {
 	return s;
 }
 
+void GetBoundaryColor(CvScalar* input, CvScalar* high, CvScalar* low) {
+
+	//FOR HIGH SCALAR
+	if (input->val[0] < (255 - H_diff))			//Hue
+		high->val[0] = input->val[0] + H_diff;
+	else
+		high->val[0] = 255;
+	if (input->val[1] < (255 - S_diff))			//Sat
+		high->val[1] = input->val[1] + S_diff;
+	else
+		high->val[1] = 255;
+	if (input->val[2] < (255 - V_diff))			//Val
+		high->val[2] = input->val[2] + V_diff;
+	else
+		high->val[2] = 255;
+
+	//FOR LOW SCALAR
+	if (input->val[0] > (H_diff))			//Hue
+		low->val[0] = input->val[0] - H_diff;
+	else
+		low->val[0] = 0;
+	if (input->val[1] > (S_diff))			//Sat
+		low->val[1] = input->val[1] - S_diff;
+	else
+		low->val[1] = 0;
+	if (input->val[2] > (V_diff))			//Val
+		low->val[2] = input->val[2] - V_diff;
+	else
+		low->val[2] = 0;
+
+}
