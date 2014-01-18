@@ -14,4 +14,5 @@ CvScalar GetPixelScalar(IplImage*, int*, int*);
 CvScalar GetPixelScalarThres(IplImage*, int*, int*, char);
 void GetBoundaryColor(CvScalar*, CvScalar*, CvScalar*);
 
+
 #endif /* IMAGEPROCESS_H_ */

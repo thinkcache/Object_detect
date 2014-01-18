@@ -8,40 +8,52 @@
 //Include Files Declarations
 #include <cv.h>
 #include <highgui.h>
+#include <stdio.h>
 #include "MyDefs.h"
 #include "ImageProcess.h"
 
 using namespace cv;
 
+//Structures Declarations
+struct myObject {
+	int object_id;
+	int obj_enable;
+	CvScalar Object_color;
+	CvScalar Object_color_h;
+	CvScalar Object_color_l;
+	double Object1_area, Object1_x, Object1_y;
+};
+
 //Function Declarations
 void control_box();
+void setUpWindows();
+void InitFrames();
+void AllObjectCentroid();
+void AcquireFrames();
 
-//Global Declarations
-int x_pos = 0, y_pos = 0, enable = 0;
+//Global Declarations-Variables
+int i, j;
 int object_trackbar;
+struct myObject obj[15];
 
-CvScalar Object1_color;
-CvScalar Object1_color_h;
-CvScalar Object1_color_l;
-double Object1_area, Object1_x, Object1_y;
-
-//Image Declarations
+//Global Declarations-IPLImages
+CvCapture *capture;
 IplImage* frame_BGR, *frame_GRY, *frame_THS, *frame_HSV, *frame_THS_temp;
 
-//MAIN FUNCTION
+//Global Declaration-Moments
+CvMoments* Object_moment = (CvMoments*) malloc(sizeof(CvMoments));
+
+////////////////////////////MAIN FUNCTION//////////////////////////////
 int main(int argc, char** argv) {
 
 	//Variables Initialization
 	char input = 0;
 
 	//Window Initialization
-	cvNamedWindow("INPUT1");
-	cvNamedWindow("OUTPUT1");
-	cvNamedWindow("CONTROL_BOX");
-	control_box();
+	setUpWindows();
 
-	//Image Pointers declarations
-	CvCapture *capture = cvCaptureFromCAM(0);
+	//Initialize Capture Device
+	capture = cvCaptureFromCAM(0);
 	//0-Internal Camera
 	//1-External Camera
 
@@ -52,46 +64,17 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-	frame_GRY = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
-	frame_THS = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
-	frame_THS_temp = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
-	frame_HSV = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 3);
-
-	//Object Images
-	IplImage *Object1 = cvCreateImage(cvGetSize(frame_HSV), IPL_DEPTH_8U, 1);
-	IplImage *Object2 = cvCreateImage(cvGetSize(frame_HSV), IPL_DEPTH_8U, 1);
-	IplImage *Object3 = cvCreateImage(cvGetSize(frame_HSV), IPL_DEPTH_8U, 1);
-
-	//MOUSE FUNCTIONS DECLARATION
-	cvSetMouseCallback("INPUT1", MouseMoveINPUT, 0);
-
-	CvMoments* Object1_moment = (CvMoments*) malloc(sizeof(CvMoments));
+	//Initialize Frames for specific sizes and types
+	InitFrames();
 
 	//MAIN WHILE LOOP
 	while (input != 27) {
 		//Acquire Image
 		frame_BGR = cvQueryFrame(capture);
-		cvSmooth(frame_BGR, frame_BGR, CV_BLUR, 3, 3);
-		cvCvtColor(frame_BGR, frame_HSV, CV_BGR2HSV);
-		//cvShowImage("OUTPUT1", frame_HSV);
+		void AcquireFrames();
 
 		//Process Image
-		if (enable == 1) {
-
-			cvInRangeS(frame_BGR, Object1_color_l, Object1_color_h,
-					frame_THS_temp);
-			cvDilate(frame_THS_temp, frame_THS, NULL, 4);
-			cvShowImage("OUTPUT1", frame_THS);
-			cvMoments(frame_THS, Object1_moment, 1);
-			Object1_area = cvGetCentralMoment(Object1_moment, 0, 0);
-			Object1_x = (cvGetSpatialMoment(Object1_moment, 1, 0))
-					/ Object1_area;
-			Object1_y = (cvGetSpatialMoment(Object1_moment, 0, 1))
-					/ Object1_area;
-			cvCircle(frame_BGR, cvPoint(Object1_x, Object1_y), 5,
-					CV_RGB(0xff,0xff,0xff));
-			printf("%lf %lf \n", Object1_x, Object1_y);
-		}
+		AllObjectCentroid();
 
 		//Display Functions
 		cvShowImage("INPUT1", frame_BGR);
@@ -100,18 +83,16 @@ int main(int argc, char** argv) {
 		input = cvWaitKey(1);
 	} //SUPER WHILE LOOP END
 
-	//Cleaning Up
+//Cleaning Up
 	printf("EXITING.....");
 	cvDestroyAllWindows();
 	cvReleaseImage(&frame_BGR);
 	cvReleaseImage(&frame_GRY);
 	cvReleaseCapture(&capture);
-} //END OF CODE
+}
+/////////////////////////END OF MAIN////////////////////////////////////
 
 //Initialization of CONTROL_BOX
-void control_box() {
-	cvCreateTrackbar("Picture", "CONTROL_BOX", &object_trackbar, 15, NULL);
-}
 
 //Call-back Function for INPUT1 window
 //When MouseEvent occurs over INPUT1,
@@ -123,16 +104,68 @@ void MouseMoveINPUT(int event, int x, int y, int, void*) {
 		//printf("x=%d y=%d  B=%d G=%d R=%d\n", x, y, B, G, R);
 	}
 	if (event == CV_EVENT_RBUTTONDOWN) {
-		enable = 1;
-		//Object1_color = GetPixelScalar(frame_BGR, &x, &y);
+		obj[object_trackbar].obj_enable = 1;
 		uchar B, G, R;
 		GetPixelValues(frame_BGR, &x, &y, &B, &G, &R);
-		Object1_color.val[0] = (double) B;
-		Object1_color.val[1] = (double) G;
-		Object1_color.val[2] = (double) R;
+		obj[object_trackbar].Object_color.val[0] = (double) B;
+		obj[object_trackbar].Object_color.val[1] = (double) G;
+		obj[object_trackbar].Object_color.val[2] = (double) R;
+		printf("%lf %lf %lf \n", obj[object_trackbar].Object_color.val[0],
+				obj[object_trackbar].Object_color.val[1],
+				obj[object_trackbar].Object_color.val[2]);
 
-		GetBoundaryColor(&Object1_color, &Object1_color_h, &Object1_color_l);
-		//printf("%lf %lf %lf \n", Object1_color.val[0], Object1_color.val[1],	Object1_color.val[2]);
+		GetBoundaryColor(&obj[object_trackbar].Object_color,
+				&obj[object_trackbar].Object_color_h,
+				&obj[object_trackbar].Object_color_l);
+
 	}
 }
 
+void setUpWindows() {
+	cvNamedWindow("INPUT1");
+	cvNamedWindow("OUTPUT1");
+	cvNamedWindow("CONTROL_BOX");
+//MOUSE FUNCTIONS DECLARATION
+	cvSetMouseCallback("INPUT1", MouseMoveINPUT, 0);
+
+	control_box();
+}
+
+void control_box() {
+	cvCreateTrackbar("Picture", "CONTROL_BOX", &object_trackbar, 14, NULL);
+}
+
+void AcquireFrames() {
+
+	cvSmooth(frame_BGR, frame_BGR, CV_BLUR, 3, 3);
+	cvCvtColor(frame_BGR, frame_HSV, CV_BGR2HSV);
+}
+
+void InitFrames() {
+	frame_GRY = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
+	frame_THS = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
+	frame_THS_temp = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 1);
+	frame_HSV = cvCreateImage(cvGetSize(frame_BGR), IPL_DEPTH_8U, 3);
+}
+
+void AllObjectCentroid() {
+	for (i = 0; i < 15; i++) {
+
+		if (obj[i].obj_enable == 1) {
+			printf("%d \n", i);
+			cvInRangeS(frame_BGR, obj[i].Object_color_l, obj[i].Object_color_h,
+					frame_THS_temp);
+			//cvDilate(frame_THS_temp, frame_THS, NULL, 4);
+			cvMoments(frame_THS, Object_moment, 1);
+			obj[i].Object1_area = cvGetCentralMoment(Object_moment, 0, 0);
+			obj[i].Object1_x = (cvGetSpatialMoment(Object_moment, 1, 0))
+					/ obj[i].Object1_area;
+			obj[i].Object1_y = (cvGetSpatialMoment(Object_moment, 0, 1))
+					/ obj[i].Object1_area;
+			if (i == object_trackbar) {
+				cvShowImage("CONTROL_BOX", frame_THS_temp);
+			}
+		}
+
+	}
+}

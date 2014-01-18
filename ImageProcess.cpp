@@ -7,16 +7,8 @@
 
 #include <cv.h>
 #include <highgui.h>
+#include <stdio.h>
 #include "MyDefs.h"
-
-struct myObject {
-	int object_id;
-	CvScalar Object_color;
-	CvScalar Object_color_h;
-	CvScalar Object_color_l;
-
-	double Object1_area, Object1_x, Object1_y;
-};
 
 void GetPixelValues(IplImage* image, int* x, int* y, uchar* B, uchar* G,
 		uchar* R) {
